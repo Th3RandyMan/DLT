@@ -1,0 +1,41 @@
+# Default configuration for development environment
+environment: development
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/app.log
+
+# Data paths
+data:
+  raw: data/raw
+  processed: data/processed
+  external: data/external
+
+# Model configuration
+model:
+  save_dir: models
+  checkpoint_dir: models/checkpoints
+  tensorboard_dir: logs/tensorboard
+
+# Training configuration
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 100
+  early_stopping:
+    patience: 10
+    min_delta: 0.001
+  
+# Hardware configuration
+device:
+  use_cuda: true
+  cuda_device: 0
+  num_workers: 4
+
+# Experiment tracking
+experiment:
+  project_name: "dlt-experiments"
+  log_wandb: false
+  log_tensorboard: true

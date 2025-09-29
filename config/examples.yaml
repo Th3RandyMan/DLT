@@ -1,0 +1,223 @@
+# Example configurations for different ML/DL architectures
+
+# Traditional Machine Learning
+traditional_ml:
+  model_type: "sklearn.ensemble.RandomForestClassifier"
+  model_params:
+    n_estimators: 100
+    max_depth: 10
+    random_state: 42
+  training:
+    validation_split: 0.2
+    metrics: ["accuracy", "f1_score"]
+  experiment:
+    name: "random_forest_baseline"
+    tags: ["sklearn", "classification", "baseline"]
+
+# Simple Neural Network (PyTorch)
+simple_nn:
+  model_type: "torch.nn.Sequential"
+  model_params:
+    layers:
+      - type: "Linear"
+        in_features: 784
+        out_features: 128
+      - type: "ReLU"
+      - type: "Dropout"
+        p: 0.2
+      - type: "Linear"
+        in_features: 128
+        out_features: 64
+      - type: "ReLU"
+      - type: "Linear"
+        in_features: 64
+        out_features: 10
+  training:
+    optimizer:
+      type: "adam"
+      lr: 0.001
+    loss: "CrossEntropyLoss"
+    epochs: 50
+    batch_size: 64
+    early_stopping:
+      patience: 10
+  hardware:
+    device: "auto"
+    compile: true  # PyTorch 2.0+ optimization
+  experiment:
+    name: "simple_mlp"
+    tags: ["pytorch", "mlp", "classification"]
+
+# Convolutional Neural Network
+cnn_model:
+  model_type: "torch.nn.Sequential"
+  model_params:
+    layers:
+      # First conv block
+      - type: "Conv2d"
+        in_channels: 3
+        out_channels: 32
+        kernel_size: 3
+        padding: 1
+      - type: "BatchNorm2d"
+        num_features: 32
+      - type: "ReLU"
+      - type: "MaxPool2d"
+        kernel_size: 2
+        stride: 2
+      
+      # Second conv block
+      - type: "Conv2d"
+        in_channels: 32
+        out_channels: 64
+        kernel_size: 3
+        padding: 1
+      - type: "BatchNorm2d"
+        num_features: 64
+      - type: "ReLU"
+      - type: "MaxPool2d"
+        kernel_size: 2
+        stride: 2
+      
+      # Third conv block
+      - type: "Conv2d"
+        in_channels: 64
+        out_channels: 128
+        kernel_size: 3
+        padding: 1
+      - type: "BatchNorm2d"
+        num_features: 128
+      - type: "ReLU"
+      - type: "AdaptiveAvgPool2d"
+        output_size: [1, 1]
+      
+      # Classifier
+      - type: "Flatten"
+      - type: "Dropout"
+        p: 0.5
+      - type: "Linear"
+        in_features: 128
+        out_features: 10
+  
+  training:
+    optimizer:
+      type: "adamw"
+      lr: 0.001
+      weight_decay: 0.01
+    loss: "CrossEntropyLoss"
+    epochs: 100
+    batch_size: 32
+    scheduler:
+      type: "cosine"
+    early_stopping:
+      patience: 15
+  
+  data:
+    preprocessing:
+      - type: "normalize"
+        mean: [0.485, 0.456, 0.406]
+        std: [0.229, 0.224, 0.225]
+    augmentation:
+      - type: "random_horizontal_flip"
+        p: 0.5
+      - type: "random_rotation"
+        degrees: 10
+  
+  hardware:
+    device: "auto"
+    precision: 16  # Mixed precision training
+    compile: true
+  
+  experiment:
+    name: "cnn_classifier"
+    tags: ["pytorch", "cnn", "computer_vision"]
+
+# Support Vector Machine
+svm_model:
+  model_type: "sklearn.svm.SVC"
+  model_params:
+    kernel: "rbf"
+    C: 1.0
+    gamma: "scale"
+    probability: true  # Enable probability estimates
+  training:
+    validation_split: 0.2
+    metrics: ["accuracy", "precision", "recall", "f1_score"]
+  experiment:
+    name: "svm_classifier"
+    tags: ["sklearn", "svm", "traditional_ml"]
+
+# Linear Regression
+linear_regression:
+  model_type: "sklearn.linear_model.LinearRegression"
+  model_params:
+    fit_intercept: true
+  training:
+    validation_split: 0.2
+    metrics: ["mse", "r2_score", "mae"]
+  experiment:
+    name: "linear_regression"
+    tags: ["sklearn", "regression", "baseline"]
+
+# XGBoost (if available)
+xgboost_model:
+  model_type: "xgboost.XGBClassifier"
+  model_params:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    random_state: 42
+  training:
+    validation_split: 0.2
+    metrics: ["accuracy", "auc"]
+  experiment:
+    name: "xgboost_classifier"
+    tags: ["xgboost", "gradient_boosting", "classification"]
+
+# TensorFlow/Keras Model
+keras_model:
+  model_type: "tensorflow.keras.Sequential"
+  model_params:
+    layers:
+      - type: "Dense"
+        units: 128
+        activation: "relu"
+        input_shape: [784]
+      - type: "Dropout"
+        rate: 0.2
+      - type: "Dense"
+        units: 64
+        activation: "relu"
+      - type: "Dense"
+        units: 10
+        activation: "softmax"
+  training:
+    optimizer:
+      type: "adam"
+      lr: 0.001
+    loss: "sparse_categorical_crossentropy"
+    metrics: ["accuracy"]
+    epochs: 50
+    batch_size: 32
+    early_stopping:
+      patience: 10
+  experiment:
+    name: "keras_mlp"
+    tags: ["tensorflow", "keras", "mlp"]
+
+# Hyperparameter optimization example
+hyperparameter_search:
+  base_model: "sklearn.ensemble.RandomForestClassifier"
+  search_space:
+    model_params.n_estimators: [50, 500]  # Range
+    model_params.max_depth: [3, 20]       # Range
+    model_params.min_samples_split: [2, 20]  # Range
+    model_params.criterion: ["gini", "entropy"]  # Categorical
+  optimization:
+    n_trials: 100
+    timeout: 3600  # 1 hour
+    metric: "accuracy"
+    direction: "maximize"
+  experiment:
+    name: "rf_hyperopt"
+    tags: ["sklearn", "hyperopt", "random_forest"]

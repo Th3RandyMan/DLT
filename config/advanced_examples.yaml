@@ -1,0 +1,291 @@
+# Enhanced DLT Configuration with Optional Features
+# Shows all available optional features and how to configure them
+
+# Example 1: High-performance CNN with all optimizations
+high_performance_cnn:
+  model_type: "torch.nn.Sequential"
+  model_params:
+    layers:
+      - type: "Conv2d"
+        in_channels: 3
+        out_channels: 64
+        kernel_size: 3
+        padding: 1
+      - type: "BatchNorm2d"
+        num_features: 64
+      - type: "ReLU"
+      - type: "MaxPool2d"
+        kernel_size: 2
+      - type: "Conv2d"
+        in_channels: 64
+        out_channels: 128
+        kernel_size: 3
+        padding: 1
+      - type: "BatchNorm2d"
+        num_features: 128
+      - type: "ReLU" 
+      - type: "AdaptiveAvgPool2d"
+        output_size: [1, 1]
+      - type: "Flatten"
+      - type: "Linear"
+        in_features: 128
+        out_features: 10
+
+  # Enhanced training configuration
+  training:
+    optimizer:
+      type: "adamw"
+      lr: 0.001
+      weight_decay: 0.01
+    loss:
+      type: "classification"  # Or auto-detect
+      category: "classification"
+      focal: true  # Use focal loss for imbalanced datasets
+      focal_alpha: 0.25
+      focal_gamma: 2.0
+      label_smoothing: 0.1  # Regularization
+      adaptive_weighting: true  # Dynamic loss reweighting
+      weights: [1.0, 2.0, 1.5]  # Manual class weights (optional)
+    epochs: 100
+    batch_size: 64
+    scheduler:
+      type: "cosine"  # Cosine annealing
+    gradient_clipping:
+      enabled: true
+      max_norm: 1.0
+    early_stopping:
+      patience: 15
+      min_delta: 0.001
+
+  # Multi-GPU and performance optimization
+  hardware:
+    device: "auto"  # Use all available GPUs
+    gpu_ids: [0, 1, 2, 3]  # Or specify which GPUs to use
+    num_workers: 8
+    pin_memory: true
+    memory_fraction: 0.9  # Use 90% of GPU memory
+    distributed:
+      enabled: true  # Enable multi-GPU training
+      backend: "nccl"
+      find_unused_parameters: false  # For complex models
+      static_graph: false  # For dynamic graphs
+
+  # Performance optimizations (all optional)
+  performance:
+    mixed_precision:
+      enabled: true  # Enable mixed precision training
+      init_scale: 65536.0
+      growth_factor: 2.0
+      backoff_factor: 0.5
+    compile:
+      enabled: true  # PyTorch 2.0+ compilation
+      mode: "max-autotune"  # Maximum optimization
+    memory_optimization: true
+    profiling:
+      enabled: true  # Performance profiling
+      memory: true
+      compute: true
+
+  experiment:
+    name: "high_performance_cnn"
+    tags: ["pytorch", "cnn", "optimized", "multi_gpu"]
+
+# Example 2: Conservative setup with minimal features
+minimal_setup:
+  model_type: "sklearn.ensemble.RandomForestClassifier"
+  model_params:
+    n_estimators: 100
+    random_state: 42
+
+  training:
+    validation_split: 0.2
+    # No optimizer, scheduler, or loss config needed for sklearn
+
+  hardware:
+    device: "cpu"  # Force CPU usage
+    num_workers: 2
+
+  performance:
+    mixed_precision:
+      enabled: false  # Disabled
+    compile:
+      enabled: false  # Disabled
+    memory_optimization: false
+    profiling:
+      enabled: false
+
+  experiment:
+    name: "minimal_rf"
+    tags: ["sklearn", "baseline", "cpu_only"]
+
+# Example 3: Weighted loss for imbalanced classification
+imbalanced_classification:
+  model_type: "torch.nn.Sequential" 
+  model_params:
+    layers:
+      - type: "Linear"
+        in_features: 784
+        out_features: 128
+      - type: "ReLU"
+      - type: "Dropout"
+        p: 0.3
+      - type: "Linear"
+        in_features: 128
+        out_features: 3  # 3 classes
+
+  training:
+    loss:
+      type: "classification"
+      focal: true  # Focal loss for imbalanced data
+      focal_alpha: 0.25
+      focal_gamma: 2.0
+      weights: [1.0, 5.0, 2.0]  # Class 1 is rare, give it 5x weight
+      adaptive_weighting: true  # Also use adaptive weighting
+      tracking:
+        smoothing_factor: 0.1
+        weight_update_frequency: 20
+    optimizer:
+      type: "adam"
+      lr: 0.001
+
+  hardware:
+    device: "auto"
+    
+  performance:
+    mixed_precision:
+      enabled: "auto"  # Auto-enable if compatible GPU
+    compile:
+      enabled: "auto"
+
+# Example 4: Memory-efficient training for large models
+memory_efficient:
+  model_type: "transformers.AutoModel"
+  model_params:
+    model_name: "bert-large-uncased"
+    
+  training:
+    batch_size: 8  # Small batch size
+    optimizer:
+      type: "adamw"
+      lr: 2e-5
+    gradient_clipping:
+      enabled: true
+      max_norm: 1.0
+
+  hardware:
+    device: "auto"
+    memory_fraction: 0.8  # Use only 80% of GPU memory
+    distributed:
+      enabled: true
+      find_unused_parameters: true  # For transformer models
+
+  performance:
+    mixed_precision:
+      enabled: true  # Essential for large models
+      init_scale: 4096.0  # Lower initial scale for stability
+    compile:
+      enabled: false  # May cause issues with transformers
+    memory_optimization: true
+    profiling:
+      enabled: true
+      memory: true  # Monitor memory usage
+
+# Example 5: Multi-objective loss combination
+multi_objective:
+  model_type: "custom.MultiTaskModel"  # Your custom model
+  
+  training:
+    loss:
+      type: "combined"
+      category: "combined"
+      components:
+        - name: "classification_loss"
+          category: "classification"
+          type: "cross_entropy"
+          weight: 1.0
+        - name: "regression_loss" 
+          category: "regression"
+          type: "mse"
+          weight: 0.5
+        - name: "auxiliary_loss"
+          category: "classification"
+          type: "cross_entropy"
+          weight: 0.2
+      adaptive_weighting: true  # Automatically balance the losses
+
+  hardware:
+    device: "auto"
+
+# Example 6: Single GPU with maximum optimization
+single_gpu_optimized:
+  model_type: "torch.nn.Sequential"
+  model_params:
+    layers:
+      - type: "Conv2d"
+        in_channels: 3
+        out_channels: 32
+        kernel_size: 3
+      - type: "ReLU"
+      - type: "Conv2d" 
+        in_channels: 32
+        out_channels: 64
+        kernel_size: 3
+      - type: "AdaptiveAvgPool2d"
+        output_size: [1, 1]
+      - type: "Flatten"
+      - type: "Linear"
+        in_features: 64
+        out_features: 10
+
+  training:
+    batch_size: 128  # Larger batch for single GPU
+    optimizer:
+      type: "adamw"
+      lr: 0.001
+
+  hardware:
+    device: "cuda:0"  # Specific GPU
+    num_workers: 6
+    pin_memory: true
+    distributed:
+      enabled: false  # Single GPU
+
+  performance:
+    mixed_precision:
+      enabled: true
+    compile:
+      enabled: true
+      mode: "reduce-overhead"  # Optimized for single GPU
+    memory_optimization: true
+
+# Example 7: Development/debugging setup
+debug_config:
+  model_type: "torch.nn.Linear"
+  model_params:
+    in_features: 10
+    out_features: 1
+
+  training:
+    epochs: 5  # Short training
+    batch_size: 16
+    optimizer:
+      type: "sgd"
+      lr: 0.01
+
+  hardware:
+    device: "cpu"  # Use CPU for debugging
+    num_workers: 0  # No multiprocessing for easier debugging
+
+  performance:
+    mixed_precision:
+      enabled: false
+    compile:
+      enabled: false  # Disable optimizations for debugging
+    profiling:
+      enabled: true  # Profile to find issues
+      memory: true
+      compute: true
+
+  experiment:
+    name: "debug_run"
+    tags: ["debug", "development"]

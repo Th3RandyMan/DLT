@@ -1,0 +1,34 @@
+# DLT Development Configuration - Fast iteration and debugging
+
+# Simple model for quick testing
+model_type: "sklearn.ensemble.RandomForestClassifier"
+model_params:
+  n_estimators: 10  # Small for fast training
+  random_state: 42
+
+# Fast training settings
+training:
+  validation_split: 0.2
+  metrics: ["accuracy"]
+  # No epochs needed for sklearn
+
+# Minimal hardware requirements
+hardware:
+  device: "cpu"  # Use CPU for quick testing
+  num_workers: 2
+
+# Experiment tracking
+experiment:
+  name: "dlt-dev-test"
+  tags: ["development", "testing", "sklearn"]
+  notes: "Quick development testing"
+  logging:
+    level: "INFO"
+    wandb: false
+    tensorboard: false
+
+# Development-specific settings
+development:
+  debug_mode: true
+  save_intermediate: false
+  quick_test: true

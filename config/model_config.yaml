@@ -1,0 +1,53 @@
+# Example model configuration for a CNN
+model:
+  name: "simple_cnn"
+  type: "classification"
+  architecture:
+    input_shape: [3, 224, 224]  # [channels, height, width]
+    num_classes: 10
+    
+    # Convolutional layers
+    conv_layers:
+      - filters: 32
+        kernel_size: 3
+        stride: 1
+        padding: 1
+        activation: "relu"
+      - filters: 64
+        kernel_size: 3
+        stride: 1
+        padding: 1
+        activation: "relu"
+      - filters: 128
+        kernel_size: 3
+        stride: 1
+        padding: 1
+        activation: "relu"
+    
+    # Pooling
+    pooling:
+      type: "max"
+      kernel_size: 2
+      stride: 2
+    
+    # Fully connected layers
+    fc_layers:
+      - units: 512
+        activation: "relu"
+        dropout: 0.5
+      - units: 256
+        activation: "relu"
+        dropout: 0.3
+
+  # Loss and optimizer
+  loss: "cross_entropy"
+  optimizer:
+    name: "adam"
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    
+  # Learning rate scheduler
+  scheduler:
+    type: "step"
+    step_size: 30
+    gamma: 0.1
