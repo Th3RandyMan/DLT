@@ -8,9 +8,10 @@ Compatible with: scikit-learn, PyTorch, TensorFlow, JAX, and any custom models.
 from typing import Any, Dict, Optional, Union, Type, List
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
-from pydantic import BaseModel, Field, validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 import yaml
 import json
+import torch.nn as nn
 
 
 class DLTConfig(BaseModel):
@@ -52,25 +53,41 @@ class DLTConfig(BaseModel):
         extra='allow'  # Allow any additional fields for flexibility
     )
     
-    # Core model configuration
-    model_type: str = Field(
-        description="Model class path (e.g., 'sklearn.ensemble.RandomForestClassifier', 'torch.nn.Sequential')"
+    # Core model configuration - now flexible!
+    model_type: Optional[str] = Field(
+        default=None,
+        description="Model class path (e.g., 'sklearn.ensemble.RandomForestClassifier', 'torch.nn.Sequential') or template name"
+    )
+    model_instance: Optional[Any] = Field(
+        default=None,
+        description="Direct model instance (PyTorch module, sklearn estimator, etc.)"
+    )
+    model_template: Optional[str] = Field(
+        default=None,
+        description="Model template name (e.g., 'mlp', 'convnet', 'transformer', 'vae')"
     )
     model_params: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Parameters passed to model constructor"
+        description="Parameters passed to model constructor or template"
     )
     
-    # Training configuration (universal)
+    # Training configuration (universal) - enhanced loss support
     training: Dict[str, Any] = Field(
         default_factory=lambda: {
             "optimizer": {"type": "auto", "lr": 1e-3},
             "loss": {
-                "type": "auto",  # Auto-detect based on task
-                "weights": None,  # Class weights for imbalanced data
-                "adaptive_weighting": False,  # Dynamic loss reweighting
+                "type": "auto",  # Auto-detect, single loss, or list of losses
+                "weights": None,  # Loss weights for multiple losses
+                "adaptive_weighting": False,  # Use Dynamic Weight Average style weighting
                 "focal": False,  # Use focal loss for classification
-                "label_smoothing": 0.0  # Label smoothing factor
+                "focal_alpha": 1.0,  # Focal loss alpha
+                "focal_gamma": 2.0,  # Focal loss gamma
+                "label_smoothing": 0.0,  # Label smoothing factor
+                "pit": False,  # Permutation Invariant Training
+                "spectral": False,  # Add spectral domain loss
+                "multi_scale": False,  # Multi-scale loss
+                "contrastive": False,  # Contrastive learning
+                "custom_losses": []  # Custom loss function specifications
             },
             "metrics": ["auto"],
             "epochs": 100,
@@ -164,12 +181,23 @@ class DLTConfig(BaseModel):
         description="Hyperparameter optimization settings with Optuna"
     )
     
-    @validator('model_type')
+    @field_validator('model_type')
+    @classmethod
     def validate_model_type(cls, v):
-        """Validate that model_type is a valid import path."""
-        if not isinstance(v, str) or '.' not in v:
-            raise ValueError("model_type must be a valid import path (e.g., 'sklearn.ensemble.RandomForestClassifier')")
+        """Validate that model_type is a valid import path if provided."""
+        if v is not None and (not isinstance(v, str) or '.' not in v):
+            raise ValueError("model_type must be a valid import path (e.g., 'sklearn.ensemble.RandomForestClassifier') or None")
         return v
+    
+    def model_post_init(self, __context: Any) -> None:
+        """Validate model configuration after initialization."""
+        model_specs = [self.model_type, self.model_instance, self.model_template]
+        non_none_specs = [spec for spec in model_specs if spec is not None]
+        
+        if len(non_none_specs) == 0:
+            raise ValueError("Must specify one of: model_type, model_instance, or model_template")
+        elif len(non_none_specs) > 1:
+            raise ValueError("Cannot specify multiple model sources. Choose one of: model_type, model_instance, or model_template")
     
     @classmethod
     def from_file(cls, path: Union[str, Path]) -> "DLTConfig":
@@ -235,26 +263,70 @@ class DLTConfig(BaseModel):
     
     def is_sklearn_model(self) -> bool:
         """Check if this is a scikit-learn model."""
-        return self.model_type.startswith('sklearn')
+        if self.model_type:
+            return self.model_type.startswith('sklearn')
+        return False
     
     def is_torch_model(self) -> bool:
         """Check if this is a PyTorch model."""
-        return self.model_type.startswith('torch') or 'torch' in self.model_type.lower()
+        if self.model_type:
+            return self.model_type.startswith('torch') or 'torch' in self.model_type.lower()
+        return False
     
     def is_tensorflow_model(self) -> bool:
         """Check if this is a TensorFlow model."""
-        return self.model_type.startswith('tensorflow') or self.model_type.startswith('tf')
+        if self.model_type:
+            return self.model_type.startswith('tensorflow') or self.model_type.startswith('tf')
+        return False
     
     def get_framework(self) -> str:
         """Detect the ML framework being used."""
-        if self.is_sklearn_model():
-            return 'sklearn'
-        elif self.is_torch_model():
-            return 'torch'
-        elif self.is_tensorflow_model():
-            return 'tensorflow'
-        else:
+        # If model instance is provided, detect from instance
+        if self.model_instance is not None:
+            if hasattr(self.model_instance, '__module__'):
+                module_name = self.model_instance.__module__
+                if 'sklearn' in module_name:
+                    return 'sklearn'
+                elif 'torch' in module_name:
+                    return 'torch'
+                elif 'tensorflow' in module_name or 'keras' in module_name:
+                    return 'tensorflow'
+            # Duck typing for PyTorch
+            if hasattr(self.model_instance, 'parameters') and callable(getattr(self.model_instance, 'parameters')):
+                return 'torch'
+            # Duck typing for sklearn
+            if hasattr(self.model_instance, 'fit') and hasattr(self.model_instance, 'predict'):
+                return 'sklearn'
             return 'custom'
+        
+        # If template is provided, assume PyTorch (most templates are PyTorch-based)
+        if self.model_template is not None:
+            return 'torch'
+        
+        # If model_type is provided, use original logic
+        if self.model_type is not None:
+            if self.is_sklearn_model():
+                return 'sklearn'
+            elif self.is_torch_model():
+                return 'torch'
+            elif self.is_tensorflow_model():
+                return 'tensorflow'
+            else:
+                return 'custom'
+        
+        # Fallback
+        return 'custom'
+    
+    def get_model_source(self) -> str:
+        """Get the source of model specification."""
+        if self.model_instance is not None:
+            return 'instance'
+        elif self.model_template is not None:
+            return 'template'
+        elif self.model_type is not None:
+            return 'type'
+        else:
+            return 'none'
     
     def model_dump(self) -> Dict[str, Any]:
         """Override model_dump to handle Field objects properly."""

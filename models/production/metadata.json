@@ -1,0 +1,102 @@
+{
+  "created_at": "2025-09-29T09:48:32.298595",
+  "config": {
+    "model_type": "sklearn.ensemble.RandomForestClassifier",
+    "model_params": {
+      "n_estimators": 100,
+      "random_state": 42
+    },
+    "training": {
+      "optimizer": {
+        "type": "auto",
+        "lr": 0.001
+      },
+      "loss": {
+        "type": "auto",
+        "weights": null,
+        "adaptive_weighting": false,
+        "focal": false,
+        "label_smoothing": 0.0
+      },
+      "metrics": [
+        "auto"
+      ],
+      "epochs": 5,
+      "batch_size": 32,
+      "validation_split": 0.2,
+      "early_stopping": {
+        "patience": 10,
+        "min_delta": 0.0001
+      },
+      "device": "auto",
+      "scheduler": {
+        "type": null,
+        "step_size": 30,
+        "gamma": 0.1,
+        "patience": 10
+      },
+      "gradient_clipping": {
+        "enabled": false,
+        "max_norm": 1.0
+      }
+    },
+    "data": {
+      "input_shape": [
+        784
+      ],
+      "output_shape": [
+        10
+      ],
+      "preprocessing": [],
+      "augmentation": [],
+      "validation_strategy": "random_split",
+      "batch_size": 32
+    },
+    "experiment": {
+      "name": "dlt_experiment",
+      "tags": [],
+      "notes": "",
+      "seed": 42,
+      "logging": {
+        "level": "INFO",
+        "wandb": false,
+        "tensorboard": true
+      }
+    },
+    "hardware": {
+      "device": "auto",
+      "gpu_ids": null,
+      "num_workers": 4,
+      "pin_memory": true,
+      "memory_fraction": 0.95,
+      "distributed": {
+        "enabled": "auto",
+        "backend": "nccl",
+        "find_unused_parameters": false,
+        "static_graph": false
+      }
+    },
+    "performance": {
+      "mixed_precision": {
+        "enabled": "auto",
+        "init_scale": 65536.0,
+        "growth_factor": 2.0,
+        "backoff_factor": 0.5,
+        "growth_interval": 2000
+      },
+      "compile": {
+        "enabled": "auto",
+        "mode": "default"
+      },
+      "memory_optimization": true,
+      "profiling": {
+        "enabled": false,
+        "memory": true,
+        "compute": true
+      }
+    },
+    "optimization": null
+  },
+  "version": "1.0.0",
+  "framework": "sklearn.ensemble.RandomForestClassifier"
+}

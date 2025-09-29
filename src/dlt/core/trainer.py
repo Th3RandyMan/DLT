@@ -64,7 +64,20 @@ class DLTTrainer:
             else:
                 self.optimizer = torch.optim.Adam(model_params, lr=lr)
             
-            self.criterion = torch.nn.CrossEntropyLoss()
+            # Setup loss function based on config or default
+            loss_config = self.config.training.get('loss', {'type': 'auto'})
+            loss_type = loss_config.get('type', 'auto').lower()
+            
+            if loss_type == 'mse':
+                self.criterion = torch.nn.MSELoss()
+                self.task_type = 'regression'
+            elif loss_type == 'crossentropy' or loss_type == 'cross_entropy':
+                self.criterion = torch.nn.CrossEntropyLoss()
+                self.task_type = 'classification'
+            else:
+                # Auto-detect or default to CrossEntropyLoss for backward compatibility
+                self.criterion = torch.nn.CrossEntropyLoss()
+                self.task_type = None  # Will be detected during training
     
     def train(self, train_data, val_data=None, verbose=False):
         """Train the model."""
@@ -105,10 +118,35 @@ class DLTTrainer:
             epochs = self.config.training.get('epochs', 10)
             batch_size = self.config.training.get('batch_size', 32)
         
-        # Convert to tensors
+        # Convert to tensors and detect task type if not already set
         if not isinstance(X_train, torch.Tensor):
             X_train = torch.FloatTensor(X_train)
-            y_train = torch.LongTensor(y_train)
+            
+            # Detect task type based on target data (only if not explicitly configured)
+            if self.task_type is None:
+                # Check if targets are continuous (regression) or discrete (classification)
+                y_unique = np.unique(y_train)
+                # If target values are continuous floats or have many unique values, it's regression
+                if (y_train.dtype.kind == 'f' or 
+                    len(y_unique) > 20 or  # Many unique values suggests regression
+                    (len(y_unique) > 2 and np.all(y_train != y_train.astype(int)))):  # Non-integer values
+                    self.task_type = 'regression'
+                    self.criterion = torch.nn.MSELoss()
+                    if verbose:
+                        print(f"Auto-detected task type: {self.task_type}")
+                else:
+                    self.task_type = 'classification'
+                    self.criterion = torch.nn.CrossEntropyLoss()
+                    if verbose:
+                        print(f"Auto-detected task type: {self.task_type}")
+            elif verbose:
+                print(f"Using configured task type: {self.task_type}")
+            
+            # Convert targets to appropriate tensor type
+            if self.task_type == 'regression':
+                y_train = torch.FloatTensor(y_train)
+            else:
+                y_train = torch.LongTensor(y_train)
         
         # Move to same device as model
         model_device = next(self.model._model.parameters()).device
@@ -127,13 +165,25 @@ class DLTTrainer:
                 
                 self.optimizer.zero_grad()
                 outputs = self.model._model(batch_X)
-                loss = self.criterion(outputs, batch_y)
+                
+                # Handle different output shapes for regression vs classification
+                if self.task_type == 'regression':
+                    # For regression, outputs should match target shape
+                    if outputs.dim() > 1 and outputs.size(1) == 1:
+                        outputs = outputs.squeeze(-1)
+                    loss = self.criterion(outputs, batch_y)
+                else:
+                    # For classification, use standard CrossEntropyLoss
+                    loss = self.criterion(outputs, batch_y)
+                
                 loss.backward()
                 self.optimizer.step()
             
             # Record loss
             with torch.no_grad():
                 outputs = self.model._model(X_train)
+                if self.task_type == 'regression' and outputs.dim() > 1 and outputs.size(1) == 1:
+                    outputs = outputs.squeeze(-1)
                 train_loss = self.criterion(outputs, y_train).item()
                 history['train_loss'].append(train_loss)
                 
@@ -141,11 +191,16 @@ class DLTTrainer:
                     X_val, y_val = val_data
                     if not isinstance(X_val, torch.Tensor):
                         X_val = torch.FloatTensor(X_val)
-                        y_val = torch.LongTensor(y_val)
+                        if self.task_type == 'regression':
+                            y_val = torch.FloatTensor(y_val)
+                        else:
+                            y_val = torch.LongTensor(y_val)
                     X_val = X_val.to(model_device)
                     y_val = y_val.to(model_device)
                     
                     val_outputs = self.model._model(X_val)
+                    if self.task_type == 'regression' and val_outputs.dim() > 1 and val_outputs.size(1) == 1:
+                        val_outputs = val_outputs.squeeze(-1)
                     val_loss = self.criterion(val_outputs, y_val).item()
                     history['val_loss'].append(val_loss)
                 else:
@@ -170,8 +225,15 @@ class DLTTrainer:
         if self.framework == 'sklearn':
             model = self.model._model if hasattr(self.model, '_model') else self.model.model
             predictions = model.predict(X_test)
-            accuracy = accuracy_score(y_test, predictions)
-            return {'accuracy': accuracy}
+            if hasattr(self, 'task_type') and self.task_type == 'regression':
+                # For regression, use R² score
+                from sklearn.metrics import r2_score
+                r2 = r2_score(y_test, predictions)
+                return {'r2_score': r2}
+            else:
+                # For classification, use accuracy
+                accuracy = accuracy_score(y_test, predictions)
+                return {'accuracy': accuracy}
         elif self.framework == 'torch':
             self.model._model.eval()
             with torch.no_grad():
@@ -183,10 +245,21 @@ class DLTTrainer:
                 X_test = X_test.to(model_device)
                 
                 outputs = self.model._model(X_test)
-                _, predictions = torch.max(outputs, 1)
-                predictions = predictions.cpu().numpy()
-                accuracy = accuracy_score(y_test, predictions)
-                return {'accuracy': accuracy}
+                
+                if hasattr(self, 'task_type') and self.task_type == 'regression':
+                    # For regression
+                    if outputs.dim() > 1 and outputs.size(1) == 1:
+                        outputs = outputs.squeeze(-1)
+                    predictions = outputs.cpu().numpy()
+                    from sklearn.metrics import r2_score
+                    r2 = r2_score(y_test, predictions)
+                    return {'r2_score': r2}
+                else:
+                    # For classification
+                    _, predictions = torch.max(outputs, 1)
+                    predictions = predictions.cpu().numpy()
+                    accuracy = accuracy_score(y_test, predictions)
+                    return {'accuracy': accuracy}
         else:
             # Generic evaluation
             predictions = self.model.predict(X_test)

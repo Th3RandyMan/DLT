@@ -1,0 +1,44 @@
+{
+  "version": "1.2.3",
+  "created_at": "2025-09-29T09:49:23.843662",
+  "model_file": "model.joblib",
+  "deployment_config": {
+    "environment": "production",
+    "logging": {
+      "level": "INFO",
+      "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+      "handlers": [
+        "file",
+        "console"
+      ],
+      "file_path": "/var/log/dlt/production.log"
+    },
+    "model_serving": {
+      "batch_size": 64,
+      "max_latency_ms": 100,
+      "timeout_seconds": 30,
+      "workers": 4
+    },
+    "monitoring": {
+      "enable_metrics": true,
+      "metrics_endpoint": "/metrics",
+      "health_endpoint": "/health",
+      "log_predictions": false,
+      "alert_thresholds": {
+        "latency_p95_ms": 200,
+        "error_rate_percent": 5.0,
+        "throughput_rps": 100
+      }
+    },
+    "security": {
+      "enable_auth": true,
+      "api_key_header": "X-API-Key",
+      "rate_limit_per_minute": 1000
+    },
+    "data_validation": {
+      "enable_input_validation": true,
+      "enable_output_validation": true,
+      "drift_detection": true
+    }
+  }
+}

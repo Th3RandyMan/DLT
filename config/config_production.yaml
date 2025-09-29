@@ -1,0 +1,30 @@
+data_validation:
+  drift_detection: true
+  enable_input_validation: true
+  enable_output_validation: true
+environment: production
+logging:
+  file_path: /var/log/dlt/production.log
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  handlers:
+  - file
+  - console
+  level: INFO
+model_serving:
+  batch_size: 64
+  max_latency_ms: 100
+  timeout_seconds: 30
+  workers: 4
+monitoring:
+  alert_thresholds:
+    error_rate_percent: 5.0
+    latency_p95_ms: 200
+    throughput_rps: 100
+  enable_metrics: true
+  health_endpoint: /health
+  log_predictions: false
+  metrics_endpoint: /metrics
+security:
+  api_key_header: X-API-Key
+  enable_auth: true
+  rate_limit_per_minute: 1000

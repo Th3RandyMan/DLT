@@ -7,12 +7,16 @@ Supports any model architecture with consistent API:
 - TensorFlow/Keras models
 - JAX models
 - Custom models with fit/predict interface
+- Model templates for easy creation
 """
 
-from typing import Any, Dict, Optional, Union, Tuple, List
+from typing import Any, Dict, Optional, Union, Tuple, List, TYPE_CHECKING
 from abc import ABC, abstractmethod
 import numpy as np
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from .config import DLTConfig
 
 try:
     import torch
@@ -80,17 +84,38 @@ class DLTModel(ABC):
         
     @classmethod
     def from_config(cls, config: "DLTConfig") -> "DLTModel":
-        """Factory method to create appropriate model wrapper based on framework."""
+        """Factory method to create appropriate model wrapper based on framework and source."""
         framework = config.get_framework()
+        model_source = config.get_model_source()
         
-        if framework == 'sklearn':
-            return SklearnModelWrapper(config)
-        elif framework == 'torch':
-            return TorchModelWrapper(config)
-        elif framework == 'tensorflow':
-            return TensorFlowModelWrapper(config)
+        # If model instance is provided directly, wrap it appropriately
+        if model_source == 'instance':
+            if framework == 'sklearn':
+                return SklearnModelWrapper(config)
+            elif framework == 'torch':
+                return TorchModelWrapper(config)
+            elif framework == 'tensorflow':
+                return TensorFlowModelWrapper(config)
+            else:
+                return CustomModelWrapper(config)
+        
+        # If template is specified, use template system
+        elif model_source == 'template':
+            return TemplateModelWrapper(config)
+        
+        # Traditional model_type approach
+        elif model_source == 'type':
+            if framework == 'sklearn':
+                return SklearnModelWrapper(config)
+            elif framework == 'torch':
+                return TorchModelWrapper(config)
+            elif framework == 'tensorflow':
+                return TensorFlowModelWrapper(config)
+            else:
+                return CustomModelWrapper(config)
+        
         else:
-            return CustomModelWrapper(config)
+            raise ValueError("No valid model specification provided")
     
     def _get_device(self) -> str:
         """Auto-detect optimal device."""
@@ -204,9 +229,12 @@ class SklearnModelWrapper(DLTModel):
         self.build_model()
     
     def build_model(self) -> Any:
-        """Build sklearn model from config."""
-        model_class = self.config.get_model_class()
-        self._model = model_class(**self.config.model_params)
+        """Build sklearn model from config or use provided instance."""
+        if self.config.model_instance is not None:
+            self._model = self.config.model_instance
+        else:
+            model_class = self.config.get_model_class()
+            self._model = model_class(**self.config.model_params)
         return self._model
     
     def fit(self, X: Any, y: Any, **kwargs) -> "DLTModel":
@@ -227,27 +255,30 @@ class TorchModelWrapper(DLTModel):
     
     def __init__(self, config: "DLTConfig"):
         super().__init__(config)
-        self.model = self.build_model()  # Build the model immediately
+        self._model = self.build_model()  # Build the model immediately
     
     def build_model(self) -> Any:
-        """Build PyTorch model from config."""
-        model_params = self.config.model_params.copy()
-        
-        if self.config.model_type == "torch.nn.Sequential":
-            # Special handling for Sequential models defined by layers
-            layers = []
-            for layer_config in model_params.get('layers', []):
-                # Create a copy to avoid modifying original config
-                layer_config_copy = layer_config.copy()
-                layer_type = layer_config_copy.pop('type')
-                if hasattr(nn, layer_type):
-                    layer_class = getattr(nn, layer_type)
-                    layers.append(layer_class(**layer_config_copy))
-            self._model = nn.Sequential(*layers)
+        """Build PyTorch model from config or use provided instance."""
+        if self.config.model_instance is not None:
+            self._model = self.config.model_instance
         else:
-            # Standard model creation
-            model_class = self.config.get_model_class()
-            self._model = model_class(**model_params)
+            model_params = self.config.model_params.copy()
+            
+            if self.config.model_type == "torch.nn.Sequential":
+                # Special handling for Sequential models defined by layers
+                layers = []
+                for layer_config in model_params.get('layers', []):
+                    # Create a copy to avoid modifying original config
+                    layer_config_copy = layer_config.copy()
+                    layer_type = layer_config_copy.pop('type')
+                    if hasattr(nn, layer_type):
+                        layer_class = getattr(nn, layer_type)
+                        layers.append(layer_class(**layer_config_copy))
+                self._model = nn.Sequential(*layers)
+            else:
+                # Standard model creation
+                model_class = self.config.get_model_class()
+                self._model = model_class(**model_params)
         
         # Move to device and apply optimizations
         self._model = self._model.to(self._device)
@@ -315,6 +346,63 @@ class TensorFlowModelWrapper(DLTModel):
     def predict(self, X: Any, **kwargs) -> Any:
         """Make predictions with TensorFlow model."""
         return self._model.predict(X, **kwargs)
+
+
+class TemplateModelWrapper(DLTModel):
+    """Wrapper for models created from templates."""
+    
+    def __init__(self, config: "DLTConfig"):
+        super().__init__(config)
+        # Build model immediately after parent initialization
+        self.build_model()
+    
+    def build_model(self) -> Any:
+        """Build model from template."""
+        if TYPE_CHECKING:
+            from .templates import create_model_from_template
+        else:
+            from .templates import create_model_from_template
+        
+        template_name = self.config.model_template
+        if template_name is None:
+            raise ValueError("model_template must be specified for TemplateModelWrapper")
+        
+        # Create model from template
+        self._model = create_model_from_template(template_name, self.config.model_params)
+        
+        # Move to device if PyTorch model
+        if HAS_TORCH and isinstance(self._model, nn.Module):
+            self._model = self._model.to(self._device)
+        
+        return self._model
+    
+    def fit(self, X: Any, y: Any, **kwargs) -> "DLTModel":
+        """Train template model using DLT trainer."""
+        if self._model is None:
+            self.build_model()
+        
+        # Use DLT trainer for training
+        from .trainer import DLTTrainer
+        trainer = DLTTrainer(self.config, self)
+        trainer.train((X, y), **kwargs)
+        
+        return self
+    
+    def predict(self, X: Any, **kwargs) -> Any:
+        """Make predictions with template model."""
+        if self._model is None:
+            raise ValueError("Model not built. Call fit() first or build_model()")
+        
+        if HAS_TORCH and isinstance(self._model, nn.Module):
+            self._model.eval()
+            with torch.no_grad():
+                if not isinstance(X, torch.Tensor):
+                    X = torch.FloatTensor(X)
+                X = X.to(next(self._model.parameters()).device)
+                outputs = self._model(X)
+                return outputs.cpu().numpy()
+        else:
+            return self._model(X)
 
 
 class CustomModelWrapper(DLTModel):
